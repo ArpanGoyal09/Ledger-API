@@ -16,7 +16,7 @@ CREATE TABLE accounts(
     user_id BIGINT NOT NULL REFERENCES users(id),
     account_number VARCHAR(20) NOT NULL UNIQUE,
     balance_minor BIGINT NOT NULL DEFAULT 0,
-    currency CHAR(3) NOT NULL DEFAULT 'INR',
+    currency VARCHAR(3) NOT NULL DEFAULT 'INR',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT balance_non_negative CHECK (balance_minor >= 0)
 );
