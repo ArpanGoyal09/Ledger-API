@@ -4,6 +4,10 @@ import com.arpan.ledger_api.exception.InsufficientFundsException;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 
 @Entity
 @Table(name = "accounts")
@@ -23,6 +27,7 @@ public class Account {
     @Column(name = "balance_minor", nullable = false)
     private Long balanceMinor;
 
+    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(nullable = false, length = 3)
     private String currency;
 
