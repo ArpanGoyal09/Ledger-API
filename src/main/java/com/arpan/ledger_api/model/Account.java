@@ -4,7 +4,6 @@ import com.arpan.ledger_api.exception.InsufficientFundsException;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
-import org.hibernate.annotations.JdbcType;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
