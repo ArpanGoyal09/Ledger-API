@@ -22,7 +22,7 @@ public class LedgerEntry {
     @Column(name = "amount_minor", nullable = false)
     private Long amountMinor;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
     protected LedgerEntry(){

@@ -25,7 +25,7 @@ public class Transfer {
     @Column(name = "status", nullable = false, length = 20)
     private TransferStatus status;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
 
     protected Transfer(){
