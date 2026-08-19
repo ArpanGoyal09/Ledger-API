@@ -6,7 +6,7 @@ public class InsufficientFundsException  extends RuntimeException{
     private final Long requestedMinor;
 
     public InsufficientFundsException(Long accountId, Long balanceMinor, Long requestedMinor){
-        super(String.format("Insufficient funds in account %d: balace %d minor units, requested %d minor units",
+        super(String.format("Insufficient funds in account %d: balance %d minor units, requested %d minor units",
             accountId, balanceMinor, requestedMinor
         ));
 
