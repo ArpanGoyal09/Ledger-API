@@ -12,7 +12,7 @@
 
 param(
     [int]$Only = 0,
-    [string]$BaseUrl = "http://localhost:8080",
+    [string]$BaseUrl = "http://localhost:8081",
     [string]$DbUser  = "ledger_app",
     [string]$DbName  = "ledger"
 )
