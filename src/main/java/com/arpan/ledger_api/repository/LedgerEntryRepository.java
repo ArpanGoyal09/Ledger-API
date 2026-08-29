@@ -16,6 +16,6 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     @Query("SELECT COALESCE(SUM(e.amountMinor), 0) FROM LedgerEntry e WHERE e.account.id = :accountId")
     long sumAmountByAccountId(@Param("accountId") Long accountId);
 
-    @Query("SELECT e FROM LedgerEntry e JOIN FETCH e.transfer WHERE e.account.id = :accountId ORDER BY e.createdAt DESC")
+    @Query("SELECT e FROM LedgerEntry e JOIN FETCH e.transfer " + "WHERE e.account.id = :accountId ORDER BY e.createdAt DESC, e.id DESC")
     List<LedgerEntry> findByAccountIdWithTransfer(@Param("accountId") Long accountId);
 }
