@@ -33,4 +33,9 @@ public class AccountController {
     public List<LedgerEntryResponse> getEntries(@PathVariable Long id){
         return accountService.getEntries(id);
     }
+
+    @GetMapping("/{id}/reconcile")
+    public ReconciliationResponse reconcile(@PathVariable Long id){
+        return accountService.reconcile(id);
+    }
 }

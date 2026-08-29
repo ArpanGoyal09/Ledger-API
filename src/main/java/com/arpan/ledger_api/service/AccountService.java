@@ -1,6 +1,6 @@
 package com.arpan.ledger_api.service;
 
-import com.arpan.ledger_api.dto.LedgerEntryResponse;
+import com.arpan.ledger_api.dto.*;
 import com.arpan.ledger_api.model.*;
 import com.arpan.ledger_api.repository.*;
 import org.springframework.stereotype.Service;
@@ -40,6 +40,14 @@ public class AccountService {
     public List<LedgerEntryResponse> getEntries(Long accountId){
         getAccount(accountId);
         return ledgerEntryRepository.findByAccountIdWithTransfer(accountId).stream().map(LedgerEntryResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ReconciliationResponse reconcile(Long accountId){
+        Account account = getAccount(accountId);
+        long stored = account.getBalanceMinor();
+        long derived = ledgerEntryRepository.sumAmountByAccountId(accountId);
+        return ReconciliationResponse.of(accountId, account.getAccountNumber(), stored, derived);
     }
 
 }
