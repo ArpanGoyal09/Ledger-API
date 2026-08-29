@@ -1,9 +1,11 @@
 package com.arpan.ledger_api.service;
 
+import com.arpan.ledger_api.dto.LedgerEntryResponse;
 import com.arpan.ledger_api.model.*;
 import com.arpan.ledger_api.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.*;
 
 @Service
 public class AccountService {
@@ -33,4 +35,11 @@ public class AccountService {
     public Account getAccount(Long accountId){
         return accountRepository.findById(accountId).orElseThrow(() -> new IllegalArgumentException("Account not found: " + accountId));
     }
+
+    @Transactional(readOnly = true)
+    public List<LedgerEntryResponse> getEntries(Long accountId){
+        getAccount(accountId);
+        return ledgerEntryRepository.findByAccountIdWithTransfer(accountId).stream().map(LedgerEntryResponse::from).toList();
+    }
+
 }
