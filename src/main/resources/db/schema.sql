@@ -17,8 +17,10 @@ CREATE TABLE accounts(
     account_number VARCHAR(20) NOT NULL UNIQUE,
     balance_minor BIGINT NOT NULL DEFAULT 0,
     currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+    account_type VARCHAR(10) NOT NULL DEFAULT 'CUSTOMER',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT balance_non_negative CHECK (balance_minor >= 0)
+    CONSTRAINT balance_non_negative CHECK (account_type = 'SYSTEM' OR balance_minor >= 0),
+    CONSTRAINT account_type_valid CHECK (account_type IN ('CUSTOMER', 'SYSTEM'))
 );
 
 CREATE TABLE transfers(

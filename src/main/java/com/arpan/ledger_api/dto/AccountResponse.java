@@ -31,7 +31,7 @@ public class AccountResponse {
             account.getAccountNumber(), 
             account.getBalanceMinor(), 
             toDecimalString(account.getBalanceMinor()), 
-            account.getCurrency().trim(), 
+            account.getCurrency(), 
             account.getCreatedAt());
     }
 

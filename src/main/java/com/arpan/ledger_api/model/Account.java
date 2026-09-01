@@ -4,9 +4,6 @@ import com.arpan.ledger_api.exception.InsufficientFundsException;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 
 @Entity
 @Table(name = "accounts")
@@ -26,9 +23,12 @@ public class Account {
     @Column(name = "balance_minor", nullable = false)
     private Long balanceMinor;
 
-    @JdbcTypeCode(SqlTypes.CHAR)
     @Column(nullable = false, length = 3)
     private String currency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_type", nullable = false, length = 10)
+    private AccountType accountType;
 
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
@@ -41,6 +41,7 @@ public class Account {
         this.user = user;
         this.accountNumber = accountNumber;
         this.currency = currency;
+        this.accountType = AccountType.CUSTOMER;
         this.balanceMinor = 0L;
     }
 
@@ -67,6 +68,7 @@ public class Account {
     public String getAccountNumber() { return accountNumber; }
     public String getCurrency() { return currency; }
     public Long getBalanceMinor() { return balanceMinor; }
+    public AccountType getAccountType() { return accountType; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 
     @Override
