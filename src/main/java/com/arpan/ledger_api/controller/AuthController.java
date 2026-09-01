@@ -23,4 +23,9 @@ public class AuthController {
         return Map.of("id", user.getId(), "username", user.getUserName(), "email", user.getEmail());
     }
     
+    @PostMapping("/login")
+    public Map<String, String> login(@RequestBody LoginRequest request){
+        String token = authService.login(request.getUsername(), request.getPassword());
+        return Map.of("token", token, "type", "Bearer");
+    }
 }

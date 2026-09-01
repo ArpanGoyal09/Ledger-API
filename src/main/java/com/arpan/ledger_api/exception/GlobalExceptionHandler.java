@@ -4,6 +4,7 @@ import com.arpan.ledger_api.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.slf4j.*;
@@ -44,6 +45,12 @@ public class GlobalExceptionHandler {
         ErrorResponse body = new ErrorResponse("MALFORMED_REQUEST", "Request body is missing or could not be parsed");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
+
+    @ExceptionHandler(BadCredentialsException.class)
+        public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex){
+            ErrorResponse body = new ErrorResponse("INVALID_CREDENTIALS", ex.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+        }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnxepected(Exception ex){
