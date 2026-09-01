@@ -5,7 +5,6 @@ import com.arpan.ledger_api.model.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-import org.hibernate.Length;
 
 public class LedgerEntryResponse {
     private final Long id;

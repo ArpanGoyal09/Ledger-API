@@ -1,6 +1,8 @@
 package com.arpan.ledger_api.model;
 
 import jakarta.persistence.*;
+
+import java.time.Duration;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -18,6 +20,15 @@ public class User {
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Column(name = "pin_hash")
+    private String pinHash;
+
+    @Column(name = "failed_pin_attempts", nullable = false)
+    private int failedPinAttempts;
+
+    @Column(name = "locked_until")
+    private OffsetDateTime lockedUntil;
 
     @Column(name = "created_at", nullable = false, updatable = false, insertable = false)
     private OffsetDateTime createdAt;
@@ -41,6 +52,42 @@ public class User {
     public void setPasswordHash(String passwordHash){
         this.passwordHash = passwordHash;
     }
+
+    public void setPinHash(String pinHash){
+        this.pinHash = pinHash;
+        this.failedPinAttempts = 0;
+        this.lockedUntil = null;
+    }
+
+    public boolean hasPin(){
+        return pinHash != null;
+    }
+
+    public boolean isLocked(){
+        return lockedUntil != null && lockedUntil.isAfter(OffsetDateTime.now());
+    }
+
+    private static final int MAX_PIN_ATTEMPTS = 5;
+    private static final Duration LOCKOUT_DURATION = Duration.ofMinutes(15);
+
+    public int recordFailedPinAttempt(){
+        this.failedPinAttempts++;
+
+        if(this.failedPinAttempts >= MAX_PIN_ATTEMPTS){
+            this.lockedUntil = OffsetDateTime.now().plus(LOCKOUT_DURATION);
+            this.failedPinAttempts = 0;
+            return 0;
+        }
+
+        return MAX_PIN_ATTEMPTS - this.failedPinAttempts;
+    }
+
+    public void resetPinAttempts(){
+        this.failedPinAttempts = 0;
+        this.lockedUntil = null;
+    }
+
+
 
     @Override
     public boolean equals(Object o){

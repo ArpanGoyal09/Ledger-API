@@ -1,9 +1,5 @@
 package com.arpan.ledger_api.dto;
 
-import com.arpan.ledger_api.model.*;
-
-import java.math.BigDecimal;
-
 public class ReconciliationResponse{
     private final Long accountId;
     private final String accountNumber;
