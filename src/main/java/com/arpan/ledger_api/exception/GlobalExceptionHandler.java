@@ -51,7 +51,15 @@ public class GlobalExceptionHandler {
             ErrorResponse body = new ErrorResponse("INVALID_CREDENTIALS", ex.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
         }
+    
 
+    @ExceptionHandler(AccountNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleAccountNotFound(AccountNotFoundException ex){
+        ErrorResponse body = new ErrorResponse("ACCOUT_NOT_FOUND", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnxepected(Exception ex){
         log.error("Unhandled exception processing request", ex);

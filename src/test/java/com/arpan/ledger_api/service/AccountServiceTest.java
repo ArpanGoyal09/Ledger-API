@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import com.arpan.ledger_api.exception.*;
 
 import java.util.List;
 
@@ -66,7 +67,7 @@ class AccountServiceTest {
     @Test
     void unknownAccountIsRejectedOnRead() {
         assertThrows(IllegalArgumentException.class, () ->
-                accountService.getAccount(999999L));
+                accountService.getAccount(999999L, user.getId()));
     }
 
     @Test
@@ -74,7 +75,7 @@ class AccountServiceTest {
         Account account = accountService.createAccount(
                 user.getId(), accountNumber("R"), "INR");
 
-        ReconciliationResponse result = accountService.reconcile(account.getId());
+        ReconciliationResponse result = accountService.reconcile(account.getId(), user.getId());
 
         assertTrue(result.isBalanced());
         assertEquals(0, result.getDriftMinor());
@@ -88,7 +89,7 @@ class AccountServiceTest {
         account.credit(50000);
         accountRepository.saveAndFlush(account);
 
-        ReconciliationResponse result = accountService.reconcile(account.getId());
+        ReconciliationResponse result = accountService.reconcile(account.getId(), user.getId());
 
         assertFalse(result.isBalanced(), "money with no ledger entry must show as drift");
         assertEquals(50000, result.getStoredBalanceMinor());
@@ -107,10 +108,19 @@ class AccountServiceTest {
         transferService.transfer(from.getId(), to.getId(), 10000, "first", user.getId());
         transferService.transfer(from.getId(), to.getId(), 20000, "second", user.getId());
 
-        List<LedgerEntryResponse> entries = accountService.getEntries(from.getId());
+        List<LedgerEntryResponse> entries = accountService.getEntries(from.getId(), user.getId());
 
         assertEquals(2, entries.size());
         assertEquals("DEBIT", entries.get(0).getDirection());
         assertEquals(-20000, entries.get(0).getAmountMinor());
+    }
+
+    @Test
+    void anotherUsersAccountIsNotVisible() {
+        Account account = accountService.createAccount(user.getId(), accountNumber("P"), "INR");
+
+        User intruder = userRepository.save(new User("intruder" + suffix, "intruder" + suffix + "@example.com", "hash"));
+
+        assertThrows(AccountNotFoundException.class, () -> accountService.getAccount(account.getId(), intruder.getId()));
     }
 }
