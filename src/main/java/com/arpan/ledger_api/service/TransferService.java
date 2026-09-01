@@ -2,6 +2,7 @@ package com.arpan.ledger_api.service;
 
 import com.arpan.ledger_api.model.Account;
 import com.arpan.ledger_api.model.LedgerEntry;
+import com.arpan.ledger_api.model.SystemAccounts;
 import com.arpan.ledger_api.model.Transfer;
 import com.arpan.ledger_api.model.User;
 import com.arpan.ledger_api.repository.AccountRepository;
@@ -26,8 +27,7 @@ public class TransferService {
         this.userRepository = userRepository;
     }
 
-    @Transactional
-    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
+    private Transfer executeTransfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
 
         if (amountMinor <= 0) {
             throw new IllegalArgumentException("Transfer amount must be positive");
@@ -63,6 +63,24 @@ public class TransferService {
         transfer.markCompleted();
 
         return transfer;
+    }
+
+    @Transactional
+    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
+        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER).orElse(null);
+        if (systemAccount != null && systemAccount.getId().equals(fromAccountId)) {
+            throw new IllegalArgumentException("Deposits must use the deposit endpoint, not a direct transfer");
+        }
+
+        return executeTransfer(fromAccountId, toAccountId, amountMinor, description, initiatedByUserId);
+    }
+
+    @Transactional
+    public Transfer deposit(Long toAccountId, long amountMinor, String description) {
+        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER)
+        .orElseThrow(() -> new IllegalStateException("System account " + SystemAccounts.EXTERNAL_ACCOUNT_NUMBER + " not found"));
+
+        return executeTransfer(systemAccount.getId(), toAccountId, amountMinor, description, systemAccount.getUser().getId());
     }
 
     private Account loadForUpdate(Long accountId) {

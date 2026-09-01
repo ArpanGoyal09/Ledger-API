@@ -17,9 +17,15 @@ public class TransferController {
 
     @PostMapping
     public Long createTransfer(@RequestBody TransferRequest request){
-        Transfer transfer = transferService.transfer(request.getFromAccountId(), request.getToAccountId(), 
-                                                    request.getAmountMinor(), request.getDescription(), 
-                                                    request.getInitiatedByUserId());
+        Transfer transfer = transferService.transfer(request.getFromAccountId(), request.getToAccountId(), request.getAmountMinor(), 
+        request.getDescription(), request.getInitiatedByUserId());
+        
+        return transfer.getId();
+    }
+
+    @PostMapping("/deposits")
+    public Long createDeposit(@RequestBody DepositRequest request) {
+        Transfer transfer = transferService.deposit(request.getToAccountId(), request.getAmountMinor(), request.getDescription());
         return transfer.getId();
     }
 }

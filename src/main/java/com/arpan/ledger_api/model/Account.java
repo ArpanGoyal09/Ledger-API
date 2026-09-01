@@ -45,6 +45,16 @@ public class Account {
         this.balanceMinor = 0L;
     }
 
+    public static Account systemAccount(User user, String accountNumber, String currency){
+        Account account = new Account(user, accountNumber, currency);
+        account.accountType = AccountType.SYSTEM;
+        return account;
+    }
+
+    public boolean allowsNegativeBalance(){
+        return accountType == AccountType.SYSTEM;
+    }
+
     public void credit(long amountMinor){
         if(amountMinor <= 0){
             throw new IllegalArgumentException("Credit Amount must be positive");
@@ -57,9 +67,10 @@ public class Account {
             throw new IllegalArgumentException("Debit Amount must be positive");
         }
 
-        if(this.balanceMinor < amountMinor){
+        if(!allowsNegativeBalance() && this.balanceMinor < amountMinor){
             throw new InsufficientFundsException(this.id, this.balanceMinor, amountMinor);
         }
+
         this.balanceMinor -= amountMinor;
     }
 

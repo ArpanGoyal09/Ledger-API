@@ -3,8 +3,12 @@ package com.arpan.ledger_api.controller;
 import com.arpan.ledger_api.model.Account;
 import com.arpan.ledger_api.model.User;
 import com.arpan.ledger_api.repository.AccountRepository;
+import com.arpan.ledger_api.repository.LedgerEntryRepository;
+import com.arpan.ledger_api.repository.TransferRepository;
 import com.arpan.ledger_api.repository.UserRepository;
 import tools.jackson.databind.ObjectMapper;
+
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -106,4 +110,22 @@ class TransferControllerTest {
                 .andExpect(jsonPath("$.balanced").value(false))
                 .andExpect(jsonPath("$.driftMinor").value(100000));
     }
+
+    @Autowired private TransferRepository transferRepository;
+    @Autowired private LedgerEntryRepository ledgerEntryRepository;
+
+    @AfterEach
+    void tearDown(){
+        ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(fromId));
+
+        ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(toId));
+
+        transferRepository.deleteAll(transferRepository.findByInitiatedByIdOrderByCreatedAtDesc(userId));
+
+        accountRepository.deleteById(fromId);
+        accountRepository.deleteById(toId);
+        userRepository.deleteById(userId);
+
+    }
+
 }
