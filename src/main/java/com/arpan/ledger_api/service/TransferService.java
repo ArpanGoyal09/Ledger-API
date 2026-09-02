@@ -1,5 +1,6 @@
 package com.arpan.ledger_api.service;
 
+import com.arpan.ledger_api.exception.AccountNotFoundException;
 import com.arpan.ledger_api.model.Account;
 import com.arpan.ledger_api.model.LedgerEntry;
 import com.arpan.ledger_api.model.SystemAccounts;
@@ -9,11 +10,15 @@ import com.arpan.ledger_api.repository.AccountRepository;
 import com.arpan.ledger_api.repository.LedgerEntryRepository;
 import com.arpan.ledger_api.repository.TransferRepository;
 import com.arpan.ledger_api.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TransferService {
+
+    private static final Logger log = LoggerFactory.getLogger(TransferService.class);
 
     private final AccountRepository accountRepository;
     private final TransferRepository transferRepository;
@@ -25,6 +30,33 @@ public class TransferService {
         this.transferRepository = transferRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.userRepository = userRepository;
+    }
+
+    @Transactional
+    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
+
+        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER).orElse(null);
+
+        if (systemAccount != null && systemAccount.getId().equals(fromAccountId)) {
+            throw new IllegalArgumentException("Deposits must use the deposit endpoint, not a direct transfer");
+        }
+
+        Account source = accountRepository.findById(fromAccountId).orElseThrow(() -> new AccountNotFoundException(fromAccountId));
+
+        if (!source.getUser().getId().equals(initiatedByUserId)) {
+            log.warn("User {} attempted to transfer from account {} owned by user {}", initiatedByUserId, fromAccountId, source.getUser().getId());
+            throw new AccountNotFoundException(fromAccountId);
+        }
+
+        return executeTransfer(fromAccountId, toAccountId, amountMinor, description, initiatedByUserId);
+    }
+
+    @Transactional
+    public Transfer deposit(Long toAccountId, long amountMinor, String description) {
+        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER)
+                .orElseThrow(() -> new IllegalStateException("System account " + SystemAccounts.EXTERNAL_ACCOUNT_NUMBER + " not found"));
+
+        return executeTransfer(systemAccount.getId(), toAccountId, amountMinor, description, systemAccount.getUser().getId());
     }
 
     private Transfer executeTransfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
@@ -47,9 +79,7 @@ public class TransferService {
         Account from = fromIsFirst ? firstLocked : secondLocked;
         Account to = fromIsFirst ? secondLocked : firstLocked;
 
-        User initiatedBy = userRepository.findById(initiatedByUserId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "User not found: " + initiatedByUserId));
+        User initiatedBy = userRepository.findById(initiatedByUserId).orElseThrow(() -> new IllegalArgumentException("User not found: " + initiatedByUserId));
 
         Transfer transfer = new Transfer(initiatedBy, amountMinor, description);
         transferRepository.save(transfer);
@@ -65,27 +95,7 @@ public class TransferService {
         return transfer;
     }
 
-    @Transactional
-    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId) {
-        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER).orElse(null);
-        if (systemAccount != null && systemAccount.getId().equals(fromAccountId)) {
-            throw new IllegalArgumentException("Deposits must use the deposit endpoint, not a direct transfer");
-        }
-
-        return executeTransfer(fromAccountId, toAccountId, amountMinor, description, initiatedByUserId);
-    }
-
-    @Transactional
-    public Transfer deposit(Long toAccountId, long amountMinor, String description) {
-        Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER)
-        .orElseThrow(() -> new IllegalStateException("System account " + SystemAccounts.EXTERNAL_ACCOUNT_NUMBER + " not found"));
-
-        return executeTransfer(systemAccount.getId(), toAccountId, amountMinor, description, systemAccount.getUser().getId());
-    }
-
     private Account loadForUpdate(Long accountId) {
-        return accountRepository.findByIdForUpdate(accountId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Account not found: " + accountId));
+        return accountRepository.findByIdForUpdate(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
     }
 }
