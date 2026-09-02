@@ -66,7 +66,7 @@ class AccountServiceTest {
 
     @Test
     void unknownAccountIsRejectedOnRead() {
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(AccountNotFoundException.class, () ->
                 accountService.getAccount(999999L, user.getId()));
     }
 

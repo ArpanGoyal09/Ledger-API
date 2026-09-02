@@ -20,7 +20,7 @@ public class AuthController {
     public Map<String, Object> register(@RequestBody RegisterRequest request){
         User user = authService.register(request.getUsername(), request.getEmail(), request.getPassword());
 
-        return Map.of("id", user.getId(), "username", user.getUserName(), "email", user.getEmail());
+        return Map.of("id", user.getId(), "username", user.getUsername(), "email", user.getEmail());
     }
     
     @PostMapping("/login")

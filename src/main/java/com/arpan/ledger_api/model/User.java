@@ -44,7 +44,7 @@ public class User {
     }
 
     public Long getId() { return id; }
-    public String getUserName() { return username; }
+    public String getUsername() { return username; }
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
     public OffsetDateTime getCreatedAt() { return createdAt; }

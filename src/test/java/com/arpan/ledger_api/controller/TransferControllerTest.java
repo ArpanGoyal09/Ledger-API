@@ -6,18 +6,15 @@ import com.arpan.ledger_api.repository.AccountRepository;
 import com.arpan.ledger_api.repository.LedgerEntryRepository;
 import com.arpan.ledger_api.repository.TransferRepository;
 import com.arpan.ledger_api.repository.UserRepository;
-import tools.jackson.databind.ObjectMapper;
-
+import com.arpan.ledger_api.service.JwtService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-
-import java.util.Map;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -27,13 +24,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TransferControllerTest {
 
     @Autowired private MockMvc mockMvc;
-    @Autowired private ObjectMapper objectMapper;
+    @Autowired private JwtService jwtService;
     @Autowired private AccountRepository accountRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private TransferRepository transferRepository;
+    @Autowired private LedgerEntryRepository ledgerEntryRepository;
 
     private Long userId;
     private Long fromId;
     private Long toId;
+    private String authHeader;
 
     @BeforeEach
     void setUp() {
@@ -52,79 +52,83 @@ class TransferControllerTest {
 
         fromId = from.getId();
         toId = to.getId();
+
+        authHeader = "Bearer " + jwtService.generateToken(userId, user.getUsername());
     }
 
-    private String json(Object o) throws Exception {
-        return objectMapper.writeValueAsString(o);
+    @AfterEach
+    void tearDown() {
+        ledgerEntryRepository.deleteAll(
+                ledgerEntryRepository.findByAccountIdWithTransfer(fromId));
+        ledgerEntryRepository.deleteAll(
+                ledgerEntryRepository.findByAccountIdWithTransfer(toId));
+        transferRepository.deleteAll(
+                transferRepository.findByInitiatedByIdOrderByCreatedAtDesc(userId));
+        accountRepository.deleteById(fromId);
+        accountRepository.deleteById(toId);
+        userRepository.deleteById(userId);
     }
 
     @Test
     void validTransferReturns200() throws Exception {
+        String payload = """
+                {"fromAccountId":%d,"toAccountId":%d,"amountMinor":30000,"description":"controller test"}
+                """.formatted(fromId, toId);
+
         mockMvc.perform(post("/api/transfers")
+                        .header("Authorization", authHeader)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "fromAccountId", fromId,
-                                "toAccountId", toId,
-                                "amountMinor", 30000,
-                                "description", "controller test",
-                                "initiatedByUserId", userId))))
+                        .content(payload))
                 .andExpect(status().isOk());
     }
 
     @Test
     void overdraftReturns400WithStructuredError() throws Exception {
-        mockMvc.perform(post("/api/transfers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of(
-                                "fromAccountId", fromId,
-                                "toAccountId", toId,
-                                "amountMinor", 500000,
-                                "description", "too much",
-                                "initiatedByUserId", userId))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("INSUFFICIENT_FUNDS"))
+        String payload = """
+                {"fromAccountId":%d,"toAccountId":%d,"amountMinor":500000, "description":"too much"}
+                """.formatted(fromId, toId);
+
+        mockMvc.perform(post("/api/transfers").header("Authorization", authHeader).contentType(MediaType.APPLICATION_JSON)
+                .content(payload)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("INSUFFICIENT_FUNDS"))
                 .andExpect(jsonPath("$.details.shortfallMinor").value(400000));
     }
 
     @Test
     void missingBodyReturns400() throws Exception {
-        mockMvc.perform(post("/api/transfers")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/transfers").header("Authorization", authHeader).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("MALFORMED_REQUEST"));
     }
 
     @Test
     void accountBalanceIsReturnedInBothForms() throws Exception {
-        mockMvc.perform(get("/api/accounts/" + fromId))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.balanceMinor").value(100000))
-                .andExpect(jsonPath("$.balance").value("1000.00"))
+        mockMvc.perform(get("/api/accounts/" + fromId).header("Authorization", authHeader)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.balanceMinor").value(100000)).andExpect(jsonPath("$.balance").value("1000.00"))
                 .andExpect(jsonPath("$.accountNumber").exists());
     }
 
     @Test
     void reconcileReportsDriftForUnbackedBalance() throws Exception {
-        mockMvc.perform(get("/api/accounts/" + fromId + "/reconcile"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.balanced").value(false))
+        mockMvc.perform(get("/api/accounts/" + fromId + "/reconcile").header("Authorization", authHeader))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.balanced").value(false))
                 .andExpect(jsonPath("$.driftMinor").value(100000));
     }
 
-    @Autowired private TransferRepository transferRepository;
-    @Autowired private LedgerEntryRepository ledgerEntryRepository;
-
-    @AfterEach
-    void tearDown(){
-        ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(fromId));
-
-        ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(toId));
-
-        transferRepository.deleteAll(transferRepository.findByInitiatedByIdOrderByCreatedAtDesc(userId));
-
-        accountRepository.deleteById(fromId);
-        accountRepository.deleteById(toId);
-        userRepository.deleteById(userId);
-
+    @Test
+    void requestWithoutTokenIsRejected() throws Exception {
+        mockMvc.perform(get("/api/accounts/" + fromId)).andExpect(status().isForbidden());
     }
 
+    @Test
+    void anotherUsersAccountReturns404() throws Exception {
+        String suffix = String.valueOf(System.nanoTime());
+        User intruder = userRepository.save(
+                new User("i" + suffix, "i" + suffix + "@example.com", "hash"));
+        String intruderHeader =
+                "Bearer " + jwtService.generateToken(intruder.getId(), intruder.getUsername());
+
+        mockMvc.perform(get("/api/accounts/" + fromId).header("Authorization", intruderHeader))
+                .andExpect(status().isNotFound());
+
+        userRepository.deleteById(intruder.getId());
+    }
 }

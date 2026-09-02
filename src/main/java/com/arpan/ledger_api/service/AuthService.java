@@ -57,7 +57,7 @@ public class AuthService {
             throw new BadCredentialsException("Invalid username or password");
         }
 
-        return jwtService.generateToken(user.getId(), user.getUserName());
+        return jwtService.generateToken(user.getId(), user.getUsername());
     }
 
 }

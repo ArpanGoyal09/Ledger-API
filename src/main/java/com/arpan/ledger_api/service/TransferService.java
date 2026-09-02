@@ -41,10 +41,10 @@ public class TransferService {
             throw new IllegalArgumentException("Deposits must use the deposit endpoint, not a direct transfer");
         }
 
-        Account source = accountRepository.findById(fromAccountId).orElseThrow(() -> new AccountNotFoundException(fromAccountId));
+        Long ownerId = accountRepository.findOwnerIdByAccountId(fromAccountId).orElseThrow(() -> new AccountNotFoundException(fromAccountId));
 
-        if (!source.getUser().getId().equals(initiatedByUserId)) {
-            log.warn("User {} attempted to transfer from account {} owned by user {}", initiatedByUserId, fromAccountId, source.getUser().getId());
+        if (!ownerId.equals(initiatedByUserId)) {
+            log.warn("User {} attempted to transfer from account {} owned by user {}", initiatedByUserId, fromAccountId, ownerId);
             throw new AccountNotFoundException(fromAccountId);
         }
 
