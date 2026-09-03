@@ -6,6 +6,7 @@ public class TransferRequest {
     private Long toAccountId;
     private long amountMinor;
     private String description;
+    private String pin;
 
     public Long getFromAccountId() { return fromAccountId; }
     public void setFromAccountId(Long fromAccountId) { this.fromAccountId = fromAccountId; }
@@ -18,4 +19,7 @@ public class TransferRequest {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getPin() { return pin; }
+    public void setPin(String pin) { this.pin = pin; }
 }

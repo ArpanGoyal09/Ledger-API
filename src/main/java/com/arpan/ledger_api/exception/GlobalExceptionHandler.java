@@ -59,7 +59,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
-    
+    @ExceptionHandler(PinException.class)
+    public ResponseEntity<ErrorResponse> handlePin(PinException ex){
+        HttpStatus status = ex.isLocked() ? HttpStatus.LOCKED : HttpStatus.FORBIDDEN;
+        String code = ex.isLocked() ? "ACCOUNT_LOCKED" : "PIN_REQUIRED";
+        Map<String, Object> details = ex.getAttemptsRemaining() == null ? null : Map.of("attemptsRemaining", ex.getAttemptsRemaining());
+        return ResponseEntity.status(status).body(new ErrorResponse(code, ex.getMessage(), details));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnxepected(Exception ex){
         log.error("Unhandled exception processing request", ex);

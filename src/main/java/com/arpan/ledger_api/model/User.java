@@ -47,6 +47,9 @@ public class User {
     public String getUsername() { return username; }
     public String getEmail() { return email; }
     public String getPasswordHash() { return passwordHash; }
+    public String getPinHash() { return pinHash; }
+    public int getFailedPinAttempts() { return failedPinAttempts; }
+    public OffsetDateTime getLockedUntil() { return lockedUntil; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
 
     public void setPasswordHash(String passwordHash){

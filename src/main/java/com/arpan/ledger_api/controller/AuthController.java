@@ -4,6 +4,8 @@ import com.arpan.ledger_api.dto.*;
 import com.arpan.ledger_api.model.*;
 import com.arpan.ledger_api.service.*;
 import org.springframework.web.bind.annotation.*;
+import com.arpan.ledger_api.config.AuthenticatedUser;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.Map;
 
@@ -11,9 +13,11 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    private final PinService pinService;
 
-    public AuthController(AuthService authService){
+    public AuthController(AuthService authService, PinService pinService){
         this.authService = authService;
+        this.pinService = pinService;
     }
 
     @PostMapping("/register")
@@ -27,5 +31,11 @@ public class AuthController {
     public Map<String, String> login(@RequestBody LoginRequest request){
         String token = authService.login(request.getUsername(), request.getPassword());
         return Map.of("token", token, "type", "Bearer");
+    }
+
+        @PostMapping("/pin")
+    public Map<String, String> setPin(@RequestBody SetPinRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
+        pinService.setPin(user.userId(), request.getPassword(), request.getPin());
+        return Map.of("status", "PIN set");
     }
 }

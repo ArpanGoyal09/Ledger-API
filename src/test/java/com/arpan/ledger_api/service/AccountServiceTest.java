@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 import com.arpan.ledger_api.exception.*;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
 
@@ -25,7 +26,9 @@ class AccountServiceTest {
     @Autowired private TransferService transferService;
     @Autowired private AccountRepository accountRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
 
+    private static final String PIN = "1234";
     private User user;
     private String suffix;
 
@@ -34,6 +37,9 @@ class AccountServiceTest {
         suffix = String.valueOf(System.nanoTime());
         user = userRepository.save(
                 new User("u" + suffix, "u" + suffix + "@example.com", "hash"));
+
+        user.setPinHash(passwordEncoder.encode(PIN));
+        userRepository.saveAndFlush(user);
     }
 
     private String accountNumber(String prefix) {
@@ -105,8 +111,8 @@ class AccountServiceTest {
         from.credit(100000);
         accountRepository.saveAndFlush(from);
 
-        transferService.transfer(from.getId(), to.getId(), 10000, "first", user.getId());
-        transferService.transfer(from.getId(), to.getId(), 20000, "second", user.getId());
+        transferService.transfer(from.getId(), to.getId(), 10000, "first", user.getId(), PIN);
+        transferService.transfer(from.getId(), to.getId(), 20000, "second", user.getId(), PIN);
 
         List<LedgerEntryResponse> entries = accountService.getEntries(from.getId(), user.getId());
 

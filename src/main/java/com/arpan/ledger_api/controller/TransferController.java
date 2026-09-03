@@ -25,7 +25,8 @@ public class TransferController {
                 request.getToAccountId(),
                 request.getAmountMinor(),
                 request.getDescription(),
-                user.userId());
+                user.userId(),
+                request.getPin());
         return transfer.getId();
     }
 

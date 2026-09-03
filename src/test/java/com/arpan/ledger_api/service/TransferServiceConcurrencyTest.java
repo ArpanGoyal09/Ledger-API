@@ -12,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,7 +23,9 @@ class TransferServiceConcurrencyTest {
     @Autowired private AccountRepository accountRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private LedgerEntryRepository ledgerEntryRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
 
+    private static final String PIN = "1234";
     private Long userId;
     private Long accountAId;
     private Long accountBId;
@@ -33,6 +36,9 @@ class TransferServiceConcurrencyTest {
 
         User user = userRepository.save(new User("test_" + suffix, "test_" + suffix + "@example.com", "hash"));
         userId = user.getId();
+
+        user.setPinHash(passwordEncoder.encode(PIN));
+        userRepository.saveAndFlush(user);
 
         Account a = accountRepository.save(new Account(user, "TA" + suffix.substring(suffix.length() - 8), "INR"));
         Account b = accountRepository.save(new Account(user, "TB" + suffix.substring(suffix.length() - 8), "INR"));
@@ -60,7 +66,7 @@ class TransferServiceConcurrencyTest {
             pool.submit(() -> {
                 try{
                     startGate.await();
-                    transferService.transfer(accountAId, accountBId, amountEach, "concurrent test", userId);
+                    transferService.transfer(accountAId, accountBId, amountEach, "concurrent test", userId, PIN);
                     succeeded.incrementAndGet();
                 } catch(InsufficientFundsException e){
                     rejected.incrementAndGet();
