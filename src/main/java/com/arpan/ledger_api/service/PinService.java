@@ -20,7 +20,7 @@ public class PinService {
 
     @Transactional
     public void setPin(Long userId, String rawPassword, String rawPin){
-        if(rawPin == null || !rawPin.matches("\\d{4, 6}")){
+        if(rawPin == null || !rawPin.matches("\\d{4,6}")){
             throw new IllegalArgumentException("PIN must be  4 to 6 digits");
         }
 
