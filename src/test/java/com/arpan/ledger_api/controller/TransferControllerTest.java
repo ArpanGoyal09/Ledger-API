@@ -203,7 +203,7 @@ class TransferControllerTest {
                                         {"fromAccountId":%d,"toAccountId":%d,"amountMinor":50000,
                                         "description":"different","pin":"%s"}
                                         """.formatted(fromId, toId, PIN)))
-                        .andExpect(status().isUnprocessableEntity())
+                        .andExpect(status().isUnprocessableContent())
                         .andExpect(jsonPath("$.error").value("IDEMPOTENCY_KEY_REUSED"));
         }
 
