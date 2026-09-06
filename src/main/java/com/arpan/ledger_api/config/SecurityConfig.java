@@ -15,26 +15,18 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final RateLimitFilter rateLimitFilter;
-
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.rateLimitFilter = rateLimitFilter;
-    }
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     @Bean
-    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter){
+    public RateLimitFilter rateLimitFilter(RateLimiter rateLimiter) {
         return new RateLimitFilter(rateLimiter);
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session ->

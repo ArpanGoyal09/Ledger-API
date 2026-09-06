@@ -13,6 +13,7 @@ public class AuthService {
     private final JwtService jwtService;
 
     private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final String DUMMY_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -51,7 +52,12 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public String login(String username, String rawPassword){
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new BadCredentialsException("Invalid username or password"));
+        User user = userRepository.findByUsername(username).orElse(null);
+
+        if(user == null){
+            passwordEncoder.matches(rawPassword, DUMMY_HASH);
+            throw new BadCredentialsException("Invalid username or password");
+        }
 
         if(!passwordEncoder.matches(rawPassword, user.getPasswordHash())){
             throw new BadCredentialsException("Invalid username or password");
