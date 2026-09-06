@@ -1,21 +1,31 @@
 package com.arpan.ledger_api.service;
 
 import com.arpan.ledger_api.exception.AccountNotFoundException;
+import com.arpan.ledger_api.exception.IdempotencyConflictException;
+import com.arpan.ledger_api.exception.IdempotencyRaceException;
 import com.arpan.ledger_api.exception.PinException;
 import com.arpan.ledger_api.model.Account;
+import com.arpan.ledger_api.model.IdempotencyKey;
 import com.arpan.ledger_api.model.LedgerEntry;
 import com.arpan.ledger_api.model.SystemAccounts;
 import com.arpan.ledger_api.model.Transfer;
 import com.arpan.ledger_api.model.User;
 import com.arpan.ledger_api.repository.AccountRepository;
+import com.arpan.ledger_api.repository.IdempotencyKeyRepository;
 import com.arpan.ledger_api.repository.LedgerEntryRepository;
 import com.arpan.ledger_api.repository.TransferRepository;
 import com.arpan.ledger_api.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Optional;
 
 @Service
 public class TransferService {
@@ -26,20 +36,42 @@ public class TransferService {
     private final TransferRepository transferRepository;
     private final UserRepository userRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final PinService pinService;
     private final PasswordEncoder passwordEncoder;
 
-    public TransferService(AccountRepository accountRepository,TransferRepository transferRepository, LedgerEntryRepository ledgerEntryRepository, UserRepository userRepository, PinService pinService, PasswordEncoder passwordEncoder) {
+    public TransferService(AccountRepository accountRepository, TransferRepository transferRepository,
+                        LedgerEntryRepository ledgerEntryRepository, UserRepository userRepository,
+                        IdempotencyKeyRepository idempotencyKeyRepository, PinService pinService, PasswordEncoder passwordEncoder) {
         this.accountRepository = accountRepository;
         this.transferRepository = transferRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.userRepository = userRepository;
+        this.idempotencyKeyRepository = idempotencyKeyRepository;
         this.pinService = pinService;
         this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional
-    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, Long initiatedByUserId, String pin) {
+    public Transfer transfer(Long fromAccountId, Long toAccountId, long amountMinor, String description, 
+        Long initiatedByUserId, String pin, String idempotencyKey) {
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("Idempotency-Key header is required");
+        }
+
+        String requestHash = hashRequest(fromAccountId, toAccountId, amountMinor, description);
+
+        Optional<IdempotencyKey> existing = idempotencyKeyRepository.findByUserIdAndIdempotencyKey(initiatedByUserId, idempotencyKey);
+
+        if (existing.isPresent()) {
+            IdempotencyKey record = existing.get();
+            if (!record.getRequestHash().equals(requestHash)) {
+                throw new IdempotencyConflictException(idempotencyKey);
+            }
+            log.info("Idempotent replay of key {} for user {}", idempotencyKey, initiatedByUserId);
+            return record.getTransfer();
+        }
 
         Account systemAccount = accountRepository.findByAccountNumber(SystemAccounts.EXTERNAL_ACCOUNT_NUMBER).orElse(null);
 
@@ -56,7 +88,20 @@ public class TransferService {
 
         verifyPin(initiatedByUserId, pin);
 
-        return executeTransfer(fromAccountId, toAccountId, amountMinor, description, initiatedByUserId);
+        Transfer transfer = executeTransfer(fromAccountId, toAccountId, amountMinor, description, initiatedByUserId);
+
+        User user = userRepository.findById(initiatedByUserId).orElseThrow();
+
+        try {
+            idempotencyKeyRepository.saveAndFlush(new IdempotencyKey(user, idempotencyKey, requestHash, transfer));
+
+        } catch (DataIntegrityViolationException e) {
+
+            log.warn("Idempotency race on key {} for user {}", idempotencyKey, initiatedByUserId);
+            throw new IdempotencyRaceException(idempotencyKey);
+        }
+
+        return transfer;
     }
 
     @Transactional
@@ -129,5 +174,21 @@ public class TransferService {
 
     private Account loadForUpdate(Long accountId) {
         return accountRepository.findByIdForUpdate(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
+    }
+
+    private String hashRequest(Long fromAccountId, Long toAccountId, long amountMinor, String description) {
+        String canonical = fromAccountId + "|" + toAccountId + "|" + amountMinor
+                + "|" + (description == null ? "" : description);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(canonical.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(64);
+            for (byte b : hash) {
+                hex.append(String.format("%02x", b));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 }

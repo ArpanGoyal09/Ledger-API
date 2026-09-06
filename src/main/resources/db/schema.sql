@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS idempotency_keys;
 DROP TABLE IF EXISTS ledger_entries;
 DROP TABLE IF EXISTS transfers;
 DROP TABLE IF EXISTS accounts;
@@ -44,8 +45,19 @@ CREATE TABLE ledger_entries(
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE idempotency_keys(
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    idempotency_key VARCHAR(255) NOT NULL, 
+    request_hash VARCHAR(64) NOT NULL,
+    transfer_id BIGINT NOT NULL REFERENCES transfers(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_user_idempotency_key UNIQUE (user_id, idempotency_key)
+);
+
 CREATE INDEX idx_ledger_entries_account ON ledger_entries(account_id);
 CREATE INDEX idx_accounts_user ON accounts(user_id);
+CREATE INDEX idx_idempotency_keys_created ON idempotency_keys(created_at);
 
 CREATE OR REPLACE FUNCTION check_transfer_balances()
 RETURNS TRIGGER AS $$

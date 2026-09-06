@@ -4,6 +4,7 @@ import com.arpan.ledger_api.exception.PinException;
 import com.arpan.ledger_api.model.Account;
 import com.arpan.ledger_api.model.User;
 import com.arpan.ledger_api.repository.AccountRepository;
+import com.arpan.ledger_api.repository.IdempotencyKeyRepository;
 import com.arpan.ledger_api.repository.LedgerEntryRepository;
 import com.arpan.ledger_api.repository.TransferRepository;
 import com.arpan.ledger_api.repository.UserRepository;
@@ -14,7 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
+import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
@@ -30,10 +31,15 @@ class PinServiceTest {
     @Autowired private AccountRepository accountRepository;
     @Autowired private TransferRepository transferRepository;
     @Autowired private LedgerEntryRepository ledgerEntryRepository;
+    @Autowired private IdempotencyKeyRepository idempotencyKeyRepository;
 
     private Long userId;
     private Long fromId;
     private Long toId;
+
+    private String key() {
+        return UUID.randomUUID().toString();
+    }
 
     @BeforeEach
     void setUp() {
@@ -54,6 +60,7 @@ class PinServiceTest {
 
     @AfterEach
     void tearDown() {
+        idempotencyKeyRepository.deleteByUserId(userId);
         ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdWithTransfer(fromId));
         ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdWithTransfer(toId));
         transferRepository.deleteAll(transferRepository.findByInitiatedByIdOrderByCreatedAtDesc(userId));
@@ -94,7 +101,7 @@ class PinServiceTest {
     void failedAttemptSurvivesTheRollbackOfTheTransfer() {
         pinService.setPin(userId, PASSWORD, PIN);
 
-        assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999"));
+        assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999", key()));
 
         User user = userRepository.findById(userId).orElseThrow();
         assertEquals(1, user.getFailedPinAttempts(), "the increment must survive the transfer's rollback");
@@ -108,7 +115,7 @@ class PinServiceTest {
         pinService.setPin(userId, PASSWORD, PIN);
 
         for (int i = 0; i < 5; i++) {
-            assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999"));
+            assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999", key()));
         }
 
         User user = userRepository.findById(userId).orElseThrow();
@@ -121,10 +128,10 @@ class PinServiceTest {
         pinService.setPin(userId, PASSWORD, PIN);
 
         for (int i = 0; i < 5; i++) {
-            assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999"));
+            assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999", key()));
         }
 
-        PinException ex = assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "correct pin", userId, PIN));
+        PinException ex = assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "correct pin", userId, PIN, key()));
 
         assertTrue(ex.isLocked(), "a locked account must be refused regardless of PIN");
     }
@@ -133,9 +140,9 @@ class PinServiceTest {
     void successfulTransferClearsTheFailureCount() {
         pinService.setPin(userId, PASSWORD, PIN);
 
-        assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999"));
+        assertThrows(PinException.class, () -> transferService.transfer(fromId, toId, 10000, "wrong pin", userId, "9999", key()));
 
-        transferService.transfer(fromId, toId, 10000, "correct pin", userId, PIN);
+        transferService.transfer(fromId, toId, 10000, "correct pin", userId, PIN, key());
 
         User user = userRepository.findById(userId).orElseThrow();
         assertEquals(0, user.getFailedPinAttempts());

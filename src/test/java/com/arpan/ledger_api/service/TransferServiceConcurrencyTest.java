@@ -13,7 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
+import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
@@ -24,11 +24,16 @@ class TransferServiceConcurrencyTest {
     @Autowired private UserRepository userRepository;
     @Autowired private LedgerEntryRepository ledgerEntryRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private IdempotencyKeyRepository idempotencyKeyRepository;
 
     private static final String PIN = "1234";
     private Long userId;
     private Long accountAId;
     private Long accountBId;
+
+    private String key() {
+        return UUID.randomUUID().toString();
+    }
 
     @BeforeEach
     void setUp(){
@@ -66,7 +71,7 @@ class TransferServiceConcurrencyTest {
             pool.submit(() -> {
                 try{
                     startGate.await();
-                    transferService.transfer(accountAId, accountBId, amountEach, "concurrent test", userId, PIN);
+                    transferService.transfer(accountAId, accountBId, amountEach, "concurrent test", userId, PIN, key());
                     succeeded.incrementAndGet();
                 } catch(InsufficientFundsException e){
                     rejected.incrementAndGet();
@@ -97,6 +102,7 @@ class TransferServiceConcurrencyTest {
 
     @AfterEach
     void tearDown(){
+        idempotencyKeyRepository.deleteByUserId(userId);
         ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountAId));
         ledgerEntryRepository.deleteAll(ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountBId));
 

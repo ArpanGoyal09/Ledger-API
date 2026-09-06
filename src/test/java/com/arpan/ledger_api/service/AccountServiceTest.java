@@ -15,6 +15,7 @@ import com.arpan.ledger_api.exception.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +32,10 @@ class AccountServiceTest {
     private static final String PIN = "1234";
     private User user;
     private String suffix;
+
+    private String key() {
+        return UUID.randomUUID().toString();
+    }
 
     @BeforeEach
     void setUp() {
@@ -111,8 +116,8 @@ class AccountServiceTest {
         from.credit(100000);
         accountRepository.saveAndFlush(from);
 
-        transferService.transfer(from.getId(), to.getId(), 10000, "first", user.getId(), PIN);
-        transferService.transfer(from.getId(), to.getId(), 20000, "second", user.getId(), PIN);
+        transferService.transfer(from.getId(), to.getId(), 10000, "first", user.getId(), PIN, key());
+        transferService.transfer(from.getId(), to.getId(), 20000, "second", user.getId(), PIN, key());
 
         List<LedgerEntryResponse> entries = accountService.getEntries(from.getId(), user.getId());
 

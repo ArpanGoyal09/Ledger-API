@@ -1,6 +1,7 @@
 package com.arpan.ledger_api.service;
 
 import com.arpan.ledger_api.exception.AccountNotFoundException;
+import com.arpan.ledger_api.exception.IdempotencyConflictException;
 import com.arpan.ledger_api.exception.InsufficientFundsException;
 import com.arpan.ledger_api.exception.PinException;
 import com.arpan.ledger_api.model.*;
@@ -13,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +33,10 @@ class TransferServiceTest {
         private User user;
         private Account accountA;
         private Account accountB;
+
+        private String key() {
+                return UUID.randomUUID().toString();
+        }
 
         @BeforeEach
         void setUp() {
@@ -53,7 +59,7 @@ class TransferServiceTest {
         @Test
         void transferMovesMoneyBetweenAccounts() {
                 transferService.transfer(accountA.getId(), accountB.getId(),
-                        30000, "test transfer", user.getId(), PIN);
+                        30000, "test transfer", user.getId(), PIN, key());
 
                 assertEquals(70000, accountA.getBalanceMinor());
                 assertEquals(30000, accountB.getBalanceMinor());
@@ -62,7 +68,7 @@ class TransferServiceTest {
         @Test
         void transferCreatesBalancedLedgerEntries() {
                 Transfer transfer = transferService.transfer(accountA.getId(), accountB.getId(),
-                        30000, "test transfer", user.getId(), PIN);
+                        30000, "test transfer", user.getId(), PIN, key());
 
                 List<LedgerEntry> entries = ledgerEntryRepository.findByTransferId(transfer.getId());
 
@@ -75,7 +81,7 @@ class TransferServiceTest {
         @Test
         void transferIsMarkedCompleted() {
                 Transfer transfer = transferService.transfer(accountA.getId(), accountB.getId(),
-                        30000, "test transfer", user.getId(), PIN);
+                        30000, "test transfer", user.getId(), PIN, key());
 
                 assertEquals(TransferStatus.COMPLETED, transfer.getStatus());
         }
@@ -84,7 +90,7 @@ class TransferServiceTest {
         void overdraftIsRejectedAndNothingChanges() {
                 assertThrows(InsufficientFundsException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                150000, "too much", user.getId(), PIN));
+                                150000, "too much", user.getId(), PIN, key()));
 
                 assertEquals(100000, accountA.getBalanceMinor(), "balance must be unchanged");
                 assertEquals(0, accountB.getBalanceMinor(), "balance must be unchanged");
@@ -94,7 +100,7 @@ class TransferServiceTest {
         void insufficientFundsExceptionCarriesTheShortfall() {
                 InsufficientFundsException ex = assertThrows(InsufficientFundsException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                150000, "too much", user.getId(), PIN));
+                                150000, "too much", user.getId(), PIN, key()));
 
                 assertEquals(100000, ex.getBalanceMinor());
                 assertEquals(150000, ex.getRequestedMinor());
@@ -105,42 +111,42 @@ class TransferServiceTest {
         void selfTransferIsRejected() {
                 assertThrows(IllegalArgumentException.class, () ->
                         transferService.transfer(accountA.getId(), accountA.getId(),
-                                1000, "self", user.getId(), PIN));
+                                1000, "self", user.getId(), PIN, key()));
         }
 
         @Test
         void zeroAmountIsRejected() {
                 assertThrows(IllegalArgumentException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                0, "zero", user.getId(), PIN));
+                                0, "zero", user.getId(), PIN, key()));
         }
 
         @Test
         void negativeAmountIsRejected() {
                 assertThrows(IllegalArgumentException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                -5000, "negative", user.getId(), PIN));
+                                -5000, "negative", user.getId(), PIN, key()));
         }
 
         @Test
         void unknownAccountIsRejected() {
                 assertThrows(AccountNotFoundException.class, () ->
                         transferService.transfer(accountA.getId(), 999999L,
-                                1000, "missing", user.getId(), PIN));
+                                1000, "missing", user.getId(), PIN, key()));
         }
 
         @Test
         void transferFromAnotherUsersAccountIsRejected() {
                 assertThrows(AccountNotFoundException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                1000, "not my account", 999999L, PIN));
+                                1000, "not my account", 999999L, PIN, key()));
         }
 
         @Test
         void missingPinIsRejected() {
                 assertThrows(PinException.class, () ->
                         transferService.transfer(accountA.getId(), accountB.getId(),
-                                30000, "no pin", user.getId(), null));
+                                30000, "no pin", user.getId(), null, key()));
         }
 
         @Test
@@ -155,6 +161,42 @@ class TransferServiceTest {
 
                 assertThrows(PinException.class, () ->
                         transferService.transfer(account.getId(), accountB.getId(),
-                                1000, "no pin set", pinless.getId(), "1234"));
+                                1000, "no pin set", pinless.getId(), "1234", key()));
+        }
+
+        @Test
+        void missingIdempotencyKeyIsRejected() {
+                assertThrows(IllegalArgumentException.class, () ->
+                        transferService.transfer(accountA.getId(), accountB.getId(),
+                                30000, "no key", user.getId(), PIN, null));
+        }
+
+        @Test
+        void replayingAKeyReturnsTheOriginalTransferWithoutMovingMoney() {
+                String sharedKey = key();
+
+                Transfer first = transferService.transfer(accountA.getId(), accountB.getId(),
+                        30000, "original", user.getId(), PIN, sharedKey);
+
+                Transfer replay = transferService.transfer(accountA.getId(), accountB.getId(),
+                        30000, "original", user.getId(), PIN, sharedKey);
+
+                assertEquals(first.getId(), replay.getId(), "a replay must return the original transfer");
+                assertEquals(70000, accountA.getBalanceMinor(), "money must move exactly once");
+                assertEquals(30000, accountB.getBalanceMinor(), "money must move exactly once");
+        }
+
+        @Test
+        void reusingAKeyWithDifferentParametersIsRejected() {
+                String sharedKey = key();
+
+                transferService.transfer(accountA.getId(), accountB.getId(),
+                        30000, "original", user.getId(), PIN, sharedKey);
+
+                assertThrows(IdempotencyConflictException.class, () ->
+                        transferService.transfer(accountA.getId(), accountB.getId(),
+                                50000, "different amount", user.getId(), PIN, sharedKey));
+
+                assertEquals(70000, accountA.getBalanceMinor(), "the rejected request must not move money");
         }
 }

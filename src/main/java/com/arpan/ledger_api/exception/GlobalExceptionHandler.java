@@ -67,6 +67,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(new ErrorResponse(code, ex.getMessage(), details));
     }
 
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotencyConflict(IdempotencyConflictException ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+                .body(new ErrorResponse("IDEMPOTENCY_KEY_REUSED", ex.getMessage()));
+    }
+
+    @ExceptionHandler(IdempotencyRaceException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotencyRace(IdempotencyRaceException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("IDEMPOTENCY_IN_PROGRESS", ex.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnxepected(Exception ex){
         log.error("Unhandled exception processing request", ex);

@@ -19,14 +19,17 @@ public class TransferController {
     }
 
     @PostMapping
-    public Long createTransfer(@RequestBody TransferRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
+    public Long createTransfer(@RequestBody TransferRequest request, 
+                            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey, 
+                            @AuthenticationPrincipal AuthenticatedUser user) {
         Transfer transfer = transferService.transfer(
                 request.getFromAccountId(),
                 request.getToAccountId(),
                 request.getAmountMinor(),
                 request.getDescription(),
                 user.userId(),
-                request.getPin());
+                request.getPin(),
+                idempotencyKey);
         return transfer.getId();
     }
 
