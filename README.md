@@ -11,7 +11,7 @@ locking with ordered acquisition, and verified by a test that creates a real rac
 two threads.
 
 **Live:** https://arpan-ledger.duckdns.org
-
+**Design rationale:** [`docs/design_decisions.md`](docs/design_decisions.md)
 ---
 
 ## Stack
@@ -306,4 +306,5 @@ src/main/java/com/arpan/ledger_api/
 
 src/main/resources/db/schema.sql    Source of truth for the schema
 .github/workflows/tests.yml         CI: tests against a PostgreSQL 16 container
+docs/design_decisions.md            Why everything is the way it is
 ```
