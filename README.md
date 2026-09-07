@@ -1,6 +1,6 @@
 # Ledger API
 
-![Tests](https://github.com/ArpanGoyal09/ledger-api/actions/workflows/tests.yml/badge.svg)
+![Tests](https://github.com/ArpanGoyal09/Ledger-API/actions/workflows/tests.yml/badge.svg)
 
 A double-entry transaction ledger REST API built with Spring Boot and PostgreSQL.
 
@@ -11,6 +11,7 @@ locking with ordered acquisition, and verified by a test that creates a real rac
 two threads.
 
 **Live:** https://arpan-ledger.duckdns.org
+
 **Design rationale:** [`docs/design_decisions.md`](docs/design_decisions.md)
 ---
 
