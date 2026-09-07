@@ -1,6 +1,6 @@
 # Ledger API
 
-![Tests](https://github.com/ArpanGoyal09/Ledger-API/actions/workflows/tests.yml/badge.svg)
+[![Tests](https://github.com/ArpanGoyal09/Ledger-API/actions/workflows/tests.yml/badge.svg)](https://github.com/ArpanGoyal09/Ledger-API/actions/workflows/tests.yml)
 
 A double-entry transaction ledger REST API built with Spring Boot and PostgreSQL.
 
@@ -13,6 +13,7 @@ two threads.
 **Live:** https://arpan-ledger.duckdns.org
 
 **Design rationale:** [`docs/design_decisions.md`](docs/design_decisions.md)
+
 ---
 
 ## Stack
@@ -309,3 +310,4 @@ src/main/resources/db/schema.sql    Source of truth for the schema
 .github/workflows/tests.yml         CI: tests against a PostgreSQL 16 container
 docs/design_decisions.md            Why everything is the way it is
 ```
+Built as a portfolio project to demonstrate backend and systems engineering.
