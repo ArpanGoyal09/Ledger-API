@@ -1,5 +1,7 @@
 # Ledger API
 
+![Tests](https://github.com/ArpanGoyal09/ledger-api/actions/workflows/tests.yml/badge.svg)
+
 A double-entry transaction ledger REST API built with Spring Boot and PostgreSQL.
 
 Money is stored as integer minor units, every transfer produces balanced debit and credit
@@ -7,6 +9,8 @@ entries, and the database enforces the invariants rather than trusting the appli
 get them right. Transfers are atomic under concurrency, protected by pessimistic row
 locking with ordered acquisition, and verified by a test that creates a real race between
 two threads.
+
+**Live:** https://arpan-ledger.duckdns.org
 
 ---
 
@@ -16,11 +20,12 @@ two threads.
 |---|---|
 | Language | Java 17 |
 | Framework | Spring Boot 4.1.0 |
-| Database | PostgreSQL 18 |
+| Database | PostgreSQL (18 in development, 16 in production) |
 | Persistence | Spring Data JPA / Hibernate 7.4 |
 | Security | Spring Security, JWT (JJWT 0.13), BCrypt |
 | Build | Maven |
-| Tests | JUnit 5, MockMvc — 37 tests |
+| Tests | JUnit 5, MockMvc. 43 tests |
+| Deployment | AWS EC2, nginx, systemd, Let's Encrypt |
 
 ---
 
@@ -41,6 +46,8 @@ two threads.
   account you do not own, and the response does not reveal that it exists.
 - **Transaction PIN** with attempt limiting and temporary lockout, plus IP based rate
   limiting on login.
+- **Idempotent transfers.** A retry with the same `Idempotency-Key` returns the original
+  result instead of moving money twice.
 
 ---
 
@@ -89,7 +96,7 @@ On Windows PowerShell:
     [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes(48)), "User")
 ```
 
-The signing key must be at least 256 bits; the application fails at startup if either
+The signing key must be at least 256 bits. The application fails at startup if either
 variable is unset.
 
 ### 4. Run
@@ -105,10 +112,11 @@ first startup and represents money entering or leaving the system.
 
 ## API
 
-All endpoints except register and login require `Authorization: Bearer <token>`.
+All endpoints except the health check, register and login require `Authorization: Bearer <token>`.
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/` | Service health check (public) |
 | POST | `/api/auth/register` | Create a user |
 | POST | `/api/auth/login` | Exchange credentials for a JWT |
 | POST | `/api/auth/pin` | Set or change the transaction PIN (requires password) |
@@ -116,39 +124,48 @@ All endpoints except register and login require `Authorization: Bearer <token>`.
 | GET | `/api/accounts/{id}` | Balance and details |
 | GET | `/api/accounts/{id}/entries` | Statement, newest first |
 | GET | `/api/accounts/{id}/reconcile` | Stored balance vs ledger sum |
-| POST | `/api/transfers` | Transfer between accounts (requires PIN) |
+| POST | `/api/transfers` | Transfer between accounts (requires PIN and `Idempotency-Key`) |
 | POST | `/api/transfers/deposits` | External deposit into an account |
 
 ### Example
 
 ```bash
+BASE=https://arpan-ledger.duckdns.org
+
 # Register and log in
-curl -X POST localhost:8081/api/auth/register \
+curl -X POST $BASE/api/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","email":"alice@example.com","password":"correcthorsebattery"}'
 
-TOKEN=$(curl -s -X POST localhost:8081/api/auth/login \
+TOKEN=$(curl -s -X POST $BASE/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"alice","password":"correcthorsebattery"}' | jq -r .token)
 
 # Set a transaction PIN
-curl -X POST localhost:8081/api/auth/pin \
+curl -X POST $BASE/api/auth/pin \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"password":"correcthorsebattery","pin":"1234"}'
 
 # Create an account and fund it
-curl -X POST localhost:8081/api/accounts \
+curl -X POST $BASE/api/accounts \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"accountNumber":"ACC001","currency":"INR"}'
 
-curl -X POST localhost:8081/api/transfers/deposits \
+curl -X POST $BASE/api/transfers/deposits \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"toAccountId":1,"amountMinor":100000,"description":"Opening deposit"}'
+
+# Transfer, with an idempotency key
+curl -X POST $BASE/api/transfers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H 'Content-Type: application/json' \
+  -d '{"fromAccountId":1,"toAccountId":2,"amountMinor":25000,"description":"Rent","pin":"1234"}'
 ```
 
 ### Money format
 
-Amounts are **integer minor units** (paise). `15075` is ₹150.75.
+Amounts are **integer minor units** (paise). `15075` is Rs 150.75.
 
 Responses return both forms, a signed integer for arithmetic and a string for display:
 
@@ -158,6 +175,19 @@ Responses return both forms, a signed integer for arithmetic and a string for di
 
 Money is never returned as a JSON number. A client's JSON parser would convert it to a
 float, reintroducing exactly the precision problem the integer representation avoids.
+
+### Idempotency
+
+`POST /api/transfers` requires an `Idempotency-Key` header. The key is stored with the
+resulting transfer, scoped per user, alongside a SHA-256 hash of the request parameters.
+
+- Same key, same parameters: the original transfer is returned and no money moves.
+- Same key, different parameters: `422 IDEMPOTENCY_KEY_REUSED`.
+- Two concurrent requests with the same key: one succeeds, the other gets
+  `409 IDEMPOTENCY_IN_PROGRESS` and can retry to collect the result.
+
+The PIN is deliberately excluded from the hash. It authenticates the caller rather than
+identifying the operation, and a client retrying might legitimately re-prompt for it.
 
 ### Errors
 
@@ -174,17 +204,19 @@ Every error has the same shape, with a stable machine readable code:
 | Code | Status | |
 |---|---|---|
 | `INSUFFICIENT_FUNDS` | 400 | Balance too low |
-| `INVALID_REQUEST` | 400 | Validation failure |
+| `INVALID_REQUEST` | 400 | Validation failure, including a missing idempotency key |
 | `MALFORMED_REQUEST` | 400 | Unparseable body |
 | `INVALID_CREDENTIALS` | 401 | Login failed |
 | `PIN_REQUIRED` | 403 | PIN missing, wrong, or not set |
 | `ACCOUNT_NOT_FOUND` | 404 | Does not exist **or** is not yours |
 | `INVALID_STATE` | 409 | Conflicts with current state |
+| `IDEMPOTENCY_IN_PROGRESS` | 409 | A concurrent request holds the same key |
+| `IDEMPOTENCY_KEY_REUSED` | 422 | Key reused with different parameters |
 | `ACCOUNT_LOCKED` | 423 | Too many failed PIN attempts |
 | `RATE_LIMIT_EXCEEDED` | 429 | Too many login attempts |
-| `INTERNAL_ERROR` | 500 | Unexpected — details are logged, not returned |
+| `INTERNAL_ERROR` | 500 | Unexpected. Details are logged, not returned |
 
-`ACCOUNT_NOT_FOUND` is returned for accounts that exist but belong to another user. This is
+`ACCOUNT_NOT_FOUND` is returned for accounts that exist but belong to another user. That is
 deliberate: with sequential IDs, a 403 would confirm which accounts exist.
 
 ---
@@ -195,43 +227,68 @@ deliberate: with sequential IDs, a 403 would confirm which accounts exist.
 mvn test
 ```
 
-37 tests across five classes. The ones worth reading:
+43 tests across five classes, run on every push by GitHub Actions against a fresh
+PostgreSQL 16 container. Because CI starts from nothing, a green run also proves
+`schema.sql` is complete and that the tests do not depend on local state.
 
-- **`TransferServiceConcurrencyTest`** — two threads released simultaneously by a
-  `CountDownLatch`, both attempting ₹400 from an account holding ₹500. Asserts exactly one
-  succeeds, the balance is exactly right, and the ledger shows exactly one debit. This test
-  caught a real regression where an ownership check inadvertently caused a stale read and
-  both transfers succeeded.
-- **`PinServiceTest.failedAttemptSurvivesTheRollbackOfTheTransfer`** — verifies that the
+The two worth reading:
+
+- **`TransferServiceConcurrencyTest`** exercises two threads released simultaneously by a
+  `CountDownLatch`, both attempting Rs 400 from an account holding Rs 500. It asserts that
+  exactly one succeeds, the balance is exactly right, and the ledger shows exactly one
+  debit. This test caught a real regression where an ownership check inadvertently caused a
+  stale read and both transfers succeeded.
+- **`PinServiceTest.failedAttemptSurvivesTheRollbackOfTheTransfer`** verifies that the
   failed attempt counter persists even though the transfer that observed the bad PIN rolls
   back. Without a separate transaction the counter would never advance and the lockout
   would be unreachable.
 
-Neither test class can use the usual `@Transactional` rollback pattern, both depend on
-real commits, so they clean up explicitly instead.
+Neither class can use the usual `@Transactional` rollback pattern. Both depend on real
+commits, so they clean up explicitly instead.
 
-`test-api.ps1` is a smoke-test script that exercises the running API end to end and checks
+`test-api.ps1` is a smoke test script that exercises the running API end to end and checks
 three invariants: every transfer's entries sum to zero, all balances sum to zero, and no
 account has drifted from its ledger.
 
 ---
 
+## Deployment
+
+Running on AWS EC2 (t3.micro, Ubuntu 24.04):
+
+```
+Internet -> nginx (443, TLS) -> Spring Boot (8081, localhost) -> PostgreSQL (5432, localhost)
+```
+
+- **nginx** terminates TLS and reverse proxies to the application. The app binds to
+  `127.0.0.1` and port 8081 is not open in the security group, so nginx is the only route
+  in. That is what makes `X-Forwarded-For` trustworthy for rate limiting.
+- **TLS** via Let's Encrypt, renewed automatically by certbot's systemd timer.
+- **systemd** runs the service as an unprivileged user, restarts it on failure, and starts
+  it on boot. Credentials live in a root owned `EnvironmentFile` with mode 600, readable by
+  systemd before it drops privileges but not by the application user.
+- **PostgreSQL 16** on the same instance. Development uses 18; nothing version specific is
+  used, but the mismatch is worth noting.
+
+---
+
 ## Known limitations
 
-- **No TLS.** Passwords and PINs travel in plaintext locally. Required before any real
-  deployment.
-- **JWTs cannot be revoked** before they expire (one hour). A refresh-token scheme or a
-  short-lived denylist would address this at the cost of some statefulness.
-- **Rate limiting is in-memory**, so it is lost on restart and not shared across instances.
-  Redis would be the production answer. It also trusts `X-Forwarded-For`, which is safe
-  only behind a reverse proxy that overwrites the header.
-- **Login has a timing side channel** — a nonexistent user returns faster than a wrong
-  password, since only the latter runs BCrypt.
-- **PIN lockout enables denial of service** — anyone who knows a username can lock that
-  account with five wrong PINs.
-- **No idempotency** on transfer submission; a duplicated request creates a second transfer.
+- **JWTs cannot be revoked** before they expire (one hour). A refresh token scheme or a
+  short lived denylist would address this, at the cost of some statefulness.
+- **Rate limiting is in memory**, so it is lost on restart and not shared across instances.
+  Redis would be the production answer. There is also no eviction, so the IP map grows
+  unbounded.
+- **PIN lockout enables denial of service.** Anyone who knows a username can lock that
+  account with five wrong PINs. Per IP limiting on the PIN path, or exponential backoff
+  instead of hard lockout, would mitigate it.
 - **The transaction PIN protects against token theft, not client compromise.** The PIN
   travels in the same requests as the token, so anything that can read one can read both.
+  An out of band factor such as an OTP is the real fix.
+- **Idempotency keys never expire.** The table grows indefinitely. Stripe holds keys for 24
+  hours; a scheduled cleanup would do the same here.
+- **Single instance, no monitoring.** No health checks beyond systemd's process
+  supervision, no metrics, no alerting.
 
 ---
 
@@ -240,7 +297,7 @@ account has drifted from its ledger.
 ```
 src/main/java/com/arpan/ledger_api/
 ├── config/       Security config, JWT filter, rate limiting, system account bootstrap
-├── controller/   HTTP layer only — no business logic
+├── controller/   HTTP layer only, no business logic
 ├── dto/          Request and response shapes; entities are never serialised
 ├── exception/    Domain exceptions and the global handler
 ├── model/        Entities, with invariants enforced by the objects themselves
@@ -248,8 +305,5 @@ src/main/java/com/arpan/ledger_api/
 └── service/      Business logic and transaction boundaries
 
 src/main/resources/db/schema.sql    Source of truth for the schema
-docs/design_decisions.md            Why everything is the way it is
+.github/workflows/tests.yml         CI: tests against a PostgreSQL 16 container
 ```
-
-Built as a portfolio project to demonstrate backend and systems engineering: relational
-design, transaction management, concurrency control, and API security.
