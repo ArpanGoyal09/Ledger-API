@@ -10,8 +10,14 @@ import com.arpan.ledger_api.service.AccountService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import java.util.List;
 
+@Tag(name = "Accounts", description = "Account creation, balances, statements, reconciliation")
+@SecurityRequirement(name = "bearerAuth")
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
@@ -41,6 +47,12 @@ public class AccountController {
                                                 @AuthenticationPrincipal AuthenticatedUser user) {
         return accountService.getEntries(id, user.userId());
     }
+
+    @Operation(summary = "Compare stored balance against the ledger",
+            description = """
+                    Recomputes the balance from ledger entries and reports any drift. \
+                    A stored balance is derived data and can drift from its source; this \
+                    endpoint detects it.""")
 
     @GetMapping("/{id}/reconcile")
     public ReconciliationResponse reconcile(@PathVariable Long id,

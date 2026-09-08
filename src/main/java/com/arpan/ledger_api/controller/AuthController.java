@@ -3,12 +3,17 @@ package com.arpan.ledger_api.controller;
 import com.arpan.ledger_api.dto.*;
 import com.arpan.ledger_api.model.*;
 import com.arpan.ledger_api.service.*;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import org.springframework.web.bind.annotation.*;
 import com.arpan.ledger_api.config.AuthenticatedUser;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.Map;
 
+@Tag(name = "Authentication", description = "Registration, login, and transaction PIN")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -33,7 +38,10 @@ public class AuthController {
         return Map.of("token", token, "type", "Bearer");
     }
 
-        @PostMapping("/pin")
+    @Operation(summary = "Set or change the transaction PIN",
+            description = "Requires the current password, so a stolen token alone cannot set a PIN.")
+
+    @PostMapping("/pin")
     public Map<String, String> setPin(@RequestBody SetPinRequest request, @AuthenticationPrincipal AuthenticatedUser user) {
         pinService.setPin(user.userId(), request.getPassword(), request.getPin());
         return Map.of("status", "PIN set");
