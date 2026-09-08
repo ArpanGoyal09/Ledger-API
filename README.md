@@ -10,7 +10,7 @@ get them right. Transfers are atomic under concurrency, protected by pessimistic
 locking with ordered acquisition, and verified by a test that creates a real race between
 two threads.
 
-**Live:** https://arpan-ledger.duckdns.org
+**Live:** https://arpan-ledger.duckdns.org/docs
 
 **Design rationale:** [`docs/design_decisions.md`](docs/design_decisions.md)
 
@@ -119,6 +119,7 @@ All endpoints except the health check, register and login require `Authorization
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/` | Service health check (public) |
+| GET | `/docs` | Interactive API documentation (public) |
 | POST | `/api/auth/register` | Create a user |
 | POST | `/api/auth/login` | Exchange credentials for a JWT |
 | POST | `/api/auth/pin` | Set or change the transaction PIN (requires password) |
